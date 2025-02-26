@@ -1,0 +1,12 @@
+name = "my_ada_project"
+description = ""
+version = "0.1.0-dev"
+
+authors = ["Julius GX"]
+maintainers = ["Julius GX <julius@jgx.fr>"]
+maintainers-logins = ["JulienGioux"]
+licenses = "MIT OR Apache-2.0 WITH LLVM-exception"
+website = ""
+tags = []
+
+executables = ["my_ada_project"]
