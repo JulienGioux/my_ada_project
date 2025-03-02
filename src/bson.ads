@@ -1,16 +1,16 @@
--- src/bson.ads
+--    src/bson.ads
 with Ada.Strings.Unbounded;   use Ada.Strings.Unbounded;
 with Ada.Containers.Vectors;
 with Ada.Containers.Ordered_Maps;
 with Ada.Streams;            use Ada.Streams;
 
 package BSON with SPARK_Mode => Off is
-   -- Exceptions
+   --  Exceptions
    Invalid_BSON_Format    : exception;
    Invalid_BSON_Type      : exception;
    BSON_Validation_Error  : exception;
 
-   -- Types
+   --  Types
    type BSON_Type is (
       BSON_Double,
       BSON_String,
@@ -25,24 +25,24 @@ package BSON with SPARK_Mode => Off is
       BSON_Int64
    );
 
-   -- Types for binary data
+   --  Types for binary data
    type BSON_Binary_Subtype is new Stream_Element range 0 .. 255;
 
-   -- Forward declarations
+   --  Forward declarations
    type BSON_Value_Type;
    type BSON_Value_Access is access BSON_Value_Type;
    type BSON_Document_Type is private;
    type BSON_Document_Access is access BSON_Document_Type;
 
-   -- Définition pour les identifiants ObjectId
-   subtype ObjectId_Type is String (1 .. 24);  -- Format hexadécimal
+   --  Définition pour les identifiants ObjectId
+   subtype ObjectId_Type is String (1 .. 24);  --  Format hexadécimal
 
-   -- Package for BSON arrays
+   --  Package for BSON arrays
    package BSON_Arrays is new Ada.Containers.Vectors
      (Index_Type   => Natural,
       Element_Type => BSON_Value_Access);
 
-   -- Package for binary data
+   --  Package for binary data
    package Binary_Data_Vectors is new Ada.Containers.Vectors
      (Index_Type   => Natural,
       Element_Type => Stream_Element);
@@ -65,7 +65,7 @@ package BSON with SPARK_Mode => Off is
       end case;
    end record;
 
-   -- Public API
+   --  Public API
    procedure Init_Document (Doc : in out BSON_Document_Type);
 
    procedure Add_String

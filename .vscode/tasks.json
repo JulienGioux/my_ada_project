@@ -1,0 +1,50 @@
+{
+    "version": "2.0.0",
+    "options": {},
+    "tasks": [
+        {
+            "label": "alr build",
+            "type": "shell",
+            "command": "alr build",
+            "args": [],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": "$ada"
+        },
+        {
+            "label": "alr run",
+            "type": "shell",
+            "command": "alr run",
+            "args": [],
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "alr -v build",
+            "type": "shell",
+            "command": "alr -v build",
+            "args": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            },
+            "problemMatcher": "$ada"
+        },
+        {
+            "label": "alr -vv build",
+            "type": "shell",
+            "command": "alr -vv build",
+            "args": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            },
+            "problemMatcher": "$ada"
+        }
+    ]
+}
