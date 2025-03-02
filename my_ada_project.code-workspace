@@ -4,5 +4,9 @@
 			"path": "."
 		}
 	],
-	"settings": {}
+	"settings": {
+		"files.trimTrailingWhitespace": true,
+		"editor.insertSpaces": true,
+		"editor.tabSize": 3
+	}
 }
