@@ -2,9 +2,9 @@
 with Ada.Strings.Unbounded;   use Ada.Strings.Unbounded;
 with Ada.Containers.Vectors;
 with Ada.Containers.Ordered_Maps;
-with Ada.Streams;            -- Ajout pour résoudre le problème de Stream_Element_Array
+with Ada.Streams;            use Ada.Streams;
 
-package BSON with SPARK_Mode is
+package BSON with SPARK_Mode => Off is
    -- Exceptions
    Invalid_BSON_Format    : exception;
    Invalid_BSON_Type      : exception;
@@ -25,27 +25,27 @@ package BSON with SPARK_Mode is
       BSON_Int64
    );
 
+   -- Types for binary data
+   type BSON_Binary_Subtype is new Stream_Element range 0 .. 255;
+
    -- Forward declarations
    type BSON_Value_Type;
    type BSON_Value_Access is access BSON_Value_Type;
    type BSON_Document_Type is private;
    type BSON_Document_Access is access BSON_Document_Type;
 
+   -- Définition pour les identifiants ObjectId
+   subtype ObjectId_Type is String (1 .. 24);  -- Format hexadécimal
+
    -- Package for BSON arrays
    package BSON_Arrays is new Ada.Containers.Vectors
      (Index_Type   => Natural,
       Element_Type => BSON_Value_Access);
 
-   -- Binary data type pour BSON_Binary
-   subtype BSON_Binary_Subtype is Natural range 0 .. 255;
-
-   -- Binary data vector
+   -- Package for binary data
    package Binary_Data_Vectors is new Ada.Containers.Vectors
      (Index_Type   => Natural,
-      Element_Type => Ada.Streams.Stream_Element);
-
-   -- ObjectId est un tableau de 12 octets
-   subtype ObjectId_Type is String (1 .. 24);  -- Format hexadécimal
+      Element_Type => Stream_Element);
 
    type BSON_Value_Type (Kind : BSON_Type := BSON_Null) is record
       case Kind is
@@ -60,110 +60,73 @@ package BSON with SPARK_Mode is
             Binary_Subtype   : BSON_Binary_Subtype;
             Binary_Data      : Binary_Data_Vectors.Vector;
          when BSON_ObjectId  => ObjectId_Value : ObjectId_Type;
-         when BSON_Date      => Date_Value     : Long_Long_Integer; -- Millisecondes depuis l'époque Unix
+         when BSON_Date      => Date_Value     : Long_Long_Integer;
          when others         => null;
       end case;
    end record;
 
    -- Public API
-   procedure Init_Document (Doc : in out BSON_Document_Type) with
-     Global => null,
-     Depends => (Doc => null);
+   procedure Init_Document (Doc : in out BSON_Document_Type);
 
    procedure Add_String
-     (Doc : in out BSON_Document_Type; Key, Value : String) with
-     Global => null,
-     Depends => (Doc => (Doc, Key, Value));
+     (Doc : in out BSON_Document_Type; Key, Value : String);
 
    procedure Add_Integer
-     (Doc : in out BSON_Document_Type; Key : String; Value : Integer) with
-     Global => null,
-     Depends => (Doc => (Doc, Key, Value));
+     (Doc : in out BSON_Document_Type; Key : String; Value : Integer);
 
    procedure Add_Long_Integer
-     (Doc : in out BSON_Document_Type; Key : String; Value : Long_Long_Integer) with
-     Global => null,
-     Depends => (Doc => (Doc, Key, Value));
+     (Doc : in out BSON_Document_Type; Key : String; Value : Long_Long_Integer);
 
    procedure Add_Double
-     (Doc : in out BSON_Document_Type; Key : String; Value : Long_Float) with
-     Global => null,
-     Depends => (Doc => (Doc, Key, Value));
+     (Doc : in out BSON_Document_Type; Key : String; Value : Long_Float);
 
    procedure Add_Boolean
-     (Doc : in out BSON_Document_Type; Key : String; Value : Boolean) with
-     Global => null,
-     Depends => (Doc => (Doc, Key, Value));
+     (Doc : in out BSON_Document_Type; Key : String; Value : Boolean);
 
    procedure Add_Document
      (Doc : in out BSON_Document_Type;
       Key : String;
-      Value : BSON_Document_Type) with
-     Global => null,
-     Depends => (Doc => (Doc, Key, Value));
+      Value : BSON_Document_Type);
 
    procedure Add_Array
-     (Doc : in out BSON_Document_Type; Key : String) with
-     Global => null,
-     Depends => (Doc => (Doc, Key));
+     (Doc : in out BSON_Document_Type; Key : String);
 
    procedure Add_Binary
      (Doc : in out BSON_Document_Type;
       Key : String;
       Subtype_Value : BSON_Binary_Subtype;
-      Data : Ada.Streams.Stream_Element_Array) with
-     Global => null,
-     Depends => (Doc => (Doc, Key, Subtype_Value, Data));
+      Data : Stream_Element_Array);
 
    procedure Add_ObjectId
      (Doc : in out BSON_Document_Type;
       Key : String;
-      Value : ObjectId_Type) with
-     Global => null,
-     Depends => (Doc => (Doc, Key, Value));
+      Value : ObjectId_Type);
 
    procedure Add_Date
      (Doc : in out BSON_Document_Type;
       Key : String;
-      Value : Long_Long_Integer) with
-     Global => null,
-     Depends => (Doc => (Doc, Key, Value));
+      Value : Long_Long_Integer);
 
    procedure Array_Add_Value
      (Doc : in out BSON_Document_Type;
       Key : String;
-      Value : BSON_Value_Type) with
-     Global => null,
-     Depends => (Doc => (Doc, Key, Value));
+      Value : BSON_Value_Type);
 
-   function To_JSON (Doc : BSON_Document_Type) return String with
-     Global => null,
-     Depends => (To_JSON'Result => Doc);
+   function To_JSON (Doc : BSON_Document_Type) return String;
 
-   function Is_Valid (Doc : BSON_Document_Type) return Boolean with
-     Global => null,
-     Depends => (Is_Valid'Result => Doc);
+   function Is_Valid (Doc : BSON_Document_Type) return Boolean;
 
-   procedure Validate (Doc : BSON_Document_Type) with
-     Global => null,
-     Depends => (null => Doc);
+   procedure Validate (Doc : BSON_Document_Type);
 
    procedure To_Binary
      (Doc : in out BSON_Document_Type;
-      Buffer : out Ada.Streams.Stream_Element_Array;
-      Last : out Ada.Streams.Stream_Element_Offset) with
-     Global => null,
-     Depends => ((Buffer, Last) => Doc);
+      Buffer : out Stream_Element_Array;
+      Last : out Stream_Element_Offset);
 
-   function From_Binary (Buffer : Ada.Streams.Stream_Element_Array)
-     return BSON_Document_Type with
-     Global => null,
-     Depends => (From_Binary'Result => Buffer);
+   function From_Binary (Buffer : Stream_Element_Array)
+     return BSON_Document_Type;
 
-   -- Gestion de la mémoire
-   procedure Free (Doc : in out BSON_Document_Type) with
-     Global => null,
-     Depends => (Doc => null);
+   procedure Free (Doc : in out BSON_Document_Type);
 
 private
    package Value_Maps is new Ada.Containers.Ordered_Maps
@@ -175,11 +138,6 @@ private
       Is_Array : Boolean := False;
    end record;
 
-   procedure Free_Document (Doc : in out BSON_Document_Type) with
-     Global => null,
-     Depends => (Doc => null);
-
-   procedure Free_Value (Value : in out BSON_Value_Access) with
-     Global => null,
-     Depends => (Value => null);
+   procedure Free_Document (Doc : in out BSON_Document_Type);
+   procedure Free_Value (Value : in out BSON_Value_Access);
 end BSON;
