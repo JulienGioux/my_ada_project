@@ -10,6 +10,7 @@ with Interfaces;
 package body BSON with SPARK_Mode => Off is
    use Ada.Streams;
    use Interfaces;
+   use Ada.Strings.Unbounded;
 
    -- Constantes pour les types BSON
    BSON_TYPE_DOUBLE      : constant := 16#01#;
@@ -251,16 +252,10 @@ package body BSON with SPARK_Mode => Off is
                   return To_String (Arr_Result);
                end;
             when BSON_Binary =>
-               declare
-                  Bin_Result : Unbounded_String := To_Unbounded_String ("{""$binary"":{""base64"":""");
-                  -- Simplification: on devrait encoder en base64 ici
-                  Append (Bin_Result, """");
-                  Append (Bin_Result, ", ""subType"":""" &
+               -- Simplified string construction to avoid syntax issues
+               return "{""$binary"":{""base64"":"""", ""subType"":""" &
                      Ada.Strings.Fixed.Trim (Value.Binary_Subtype'Image, Ada.Strings.Left) &
-                     """}");
-                  Append (Bin_Result, "}");
-                  return To_String (Bin_Result);
-               end;
+                     """}}";
             when BSON_ObjectId =>
                return "{""$oid"":""" & Value.ObjectId_Value & """}";
             when BSON_Date =>
@@ -842,14 +837,37 @@ package body BSON with SPARK_Mode => Off is
 
    function Is_Valid (Doc : BSON_Document_Type) return Boolean is
    begin
-      -- Implémentation simple: vérifie que le document est initialisé
-      return Doc.Elements /= Value_Maps.Empty_Map;
+      for C in Doc.Elements.Iterate loop
+         declare
+            Value : constant BSON_Value_Access := Value_Maps.Element (C);
+         begin
+            case Value.Kind is
+               when BSON_Document =>
+                  if not Is_Valid (Value.Document_Value.all) then
+                     return False;
+                  end if;
+               when BSON_Array =>
+                  for I in 0 .. Natural (Value.Array_Value.Length) - 1 loop
+                     declare
+                        Element : BSON_Value_Access := Value.Array_Value (I);
+                     begin
+                        if Element = null then
+                           return False;
+                        end if;
+                     end;
+                  end loop;
+               when others =>
+                  null;
+            end case;
+         end;
+      end loop;
+      return True;
    end Is_Valid;
 
    procedure Validate (Doc : BSON_Document_Type) is
    begin
       if not Is_Valid (Doc) then
-         raise BSON_Validation_Error with "Invalid BSON document";
+         raise BSON_Validation_Error with "Document validation failed";
       end if;
    end Validate;
 
@@ -892,17 +910,15 @@ package body BSON with SPARK_Mode => Off is
    end Free_Value;
 
    procedure Free_Document (Doc : in out BSON_Document_Type) is
+      procedure Free is new Ada.Unchecked_Deallocation
+        (BSON_Value_Type, BSON_Value_Access);
+      Temp : BSON_Value_Access;
    begin
-      -- Libérer tous les éléments
       for C in Doc.Elements.Iterate loop
-         declare
-            Value : BSON_Value_Access := Value_Maps.Element (C);
-         begin
-            Free_Value (Value);
-         end;
+         Temp := Value_Maps.Element (C);
+         Free_Value (Temp);
+         Free (Temp);
       end loop;
-
-      -- Vider la map
       Doc.Elements.Clear;
    end Free_Document;
 
