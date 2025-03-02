@@ -533,4 +533,381 @@ package body BSON with SPARK_Mode => Off is
                   Write_CString (B, Offset, Key);
                   Write_Int64 (B, Offset, Value.Int64_Value);
 
-               when
+               when BSON_Boolean =>
+                  B (Offset) := BSON_TYPE_BOOLEAN;
+                  Offset := Offset + 1;
+                  Write_CString (B, Offset, Key);
+                  B (Offset) := (if Value.Boolean_Value then 1 else 0);
+                  Offset := Offset + 1;
+
+               when BSON_Binary =>
+                  B (Offset) := BSON_TYPE_BINARY;
+                  Offset := Offset + 1;
+                  Write_CString (B, Offset, Key);
+
+                  -- Écrire la taille des données binaires
+                  Write_Int32 (B, Offset, Integer (Value.Binary_Data.Length));
+
+                  -- Écrire le sous-type
+                  B (Offset) := Stream_Element (Value.Binary_Subtype);
+                  Offset := Offset + 1;
+
+                  -- Écrire les données binaires
+                  for I in 0 .. Natural (Value.Binary_Data.Length) - 1 loop
+                     B (Offset) := Value.Binary_Data (I);
+                     Offset := Offset + 1;
+                  end loop;
+
+               when BSON_ObjectId =>
+                  B (Offset) := BSON_TYPE_OBJECTID;
+                  Offset := Offset + 1;
+                  Write_CString (B, Offset, Key);
+
+                  -- Convertir l'ObjectId de hex à binaire
+                  for I in 0 .. 11 loop
+                     declare
+                        Hex_Index : constant Integer := I * 2 + 1;
+                        Hex_Substr : constant String := Value.ObjectId_Value (Hex_Index .. Hex_Index + 1);
+                     begin
+                        B (Offset) := Hex_To_Stream_Element (Hex_Substr);
+                        Offset := Offset + 1;
+                     end;
+                  end loop;
+
+               when BSON_Date =>
+                  B (Offset) := BSON_TYPE_DATE;
+                  Offset := Offset + 1;
+                  Write_CString (B, Offset, Key);
+                  Write_Int64 (B, Offset, Value.Date_Value);
+
+               when BSON_Null =>
+                  B (Offset) := BSON_TYPE_NULL;
+                  Offset := Offset + 1;
+                  Write_CString (B, Offset, Key);
+
+               when others =>
+                  raise Program_Error with "Unsupported BSON type";
+            end case;
+         end Write_Value;
+      begin
+         -- Réserver de l'espace pour la taille (4 octets)
+         Offset := Offset + 4;
+
+         -- Écrire tous les éléments
+         for C in D.Elements.Iterate loop
+            declare
+               Key   : constant String := To_String (Value_Maps.Key (C));
+               Value : constant BSON_Value_Access := Value_Maps.Element (C);
+            begin
+               Write_Value (Value, Key);
+            end;
+         end loop;
+
+         -- Écrire le terminateur
+         B (Offset) := 0;
+         Offset := Offset + 1;
+
+         -- Mettre à jour la taille
+         declare
+            Doc_Size : constant Integer := Integer (Offset - Start_Offset);
+            Size_Offset : Stream_Element_Offset := Start_Offset;
+         begin
+            Write_Int32 (B, Size_Offset, Doc_Size);
+         end;
+      end Write_Document;
+
+      Total_Size : constant Integer := Calculate_Size (Doc);
+   begin
+      if Total_Size > Buffer'Length then
+         raise Constraint_Error with "Buffer too small";
+      end if;
+
+      Last := Buffer'First;
+      Write_Document (Doc, Buffer, Last);
+      Last := Last - 1;  -- Ajuster pour pointer vers le dernier élément écrit
+   end To_Binary;
+
+   function From_Binary (Buffer : Stream_Element_Array) return BSON_Document_Type is
+      Doc    : BSON_Document_Type;
+      Offset : Stream_Element_Offset := Buffer'First;
+
+      function Read_Int32 return Integer is
+         Result : Unsigned_32;
+      begin
+         -- Format little-endian
+         Result := Unsigned_32 (Buffer (Offset)) +
+                   Unsigned_32 (Buffer (Offset + 1)) * 16#100# +
+                   Unsigned_32 (Buffer (Offset + 2)) * 16#10000# +
+                   Unsigned_32 (Buffer (Offset + 3)) * 16#1000000#;
+         Offset := Offset + 4;
+         return Integer (Result);
+      end Read_Int32;
+
+      function Read_Int64 return Long_Long_Integer is
+         Result : Unsigned_64 := 0;
+      begin
+         -- Format little-endian
+         for I in 0 .. 7 loop
+            Result := Result + Unsigned_64 (Buffer (Offset + Stream_Element_Offset (I))) *
+                     (2**(8*I));
+         end loop;
+         Offset := Offset + 8;
+         return Long_Long_Integer (Result);
+      end Read_Int64;
+
+      function Read_Double return Long_Float is
+         -- Simplification: conversion réelle requiert IEEE 754
+         Value : constant Long_Long_Integer := Read_Int64;
+      begin
+         return Long_Float (Value) / 1000.0;
+      end Read_Double;
+
+      function Read_CString return String is
+         Start_Offset : constant Stream_Element_Offset := Offset;
+         Length       : Stream_Element_Offset := 0;
+      begin
+         -- Trouver la fin de la chaîne
+         while Offset <= Buffer'Last and then Buffer (Offset) /= 0 loop
+            Offset := Offset + 1;
+            Length := Length + 1;
+         end loop;
+
+         if Offset > Buffer'Last then
+            raise Invalid_BSON_Format with "CString not null-terminated";
+         end if;
+
+         -- Avancer après le null-terminator
+         Offset := Offset + 1;
+
+         -- Convertir en String
+         if Length = 0 then
+            return "";
+         else
+            declare
+               Result : String (1 .. Integer (Length));
+            begin
+               for I in 0 .. Length - 1 loop
+                  Result (Integer (I + 1)) := Character'Val (Buffer (Start_Offset + I));
+               end loop;
+               return Result;
+            end;
+         end if;
+      end Read_CString;
+
+      function Read_String return String is
+         Length : constant Integer := Read_Int32 - 1; -- -1 pour exclure le null-terminator
+         Result : String (1 .. Length);
+      begin
+         for I in 1 .. Length loop
+            Result (I) := Character'Val (Buffer (Offset));
+            Offset := Offset + 1;
+         end loop;
+
+         -- Sauter le null-terminator
+         Offset := Offset + 1;
+         return Result;
+      end Read_String;
+
+      function Read_Document return BSON_Document_Type is
+         Size        : constant Integer := Read_Int32;
+         End_Offset  : constant Stream_Element_Offset := Offset + Stream_Element_Offset (Size - 4);
+         Result      : BSON_Document_Type;
+      begin
+         Init_Document (Result);
+
+         while Offset < End_Offset - 1 loop
+            declare
+               Element_Type : constant Stream_Element := Buffer (Offset);
+               Key          : String;
+            begin
+               Offset := Offset + 1;
+               Key := Read_CString;
+
+               case Element_Type is
+                  when BSON_TYPE_DOUBLE =>
+                     Add_Double (Result, Key, Read_Double);
+
+                  when BSON_TYPE_STRING =>
+                     Add_String (Result, Key, Read_String);
+
+                  when BSON_TYPE_DOCUMENT =>
+                     declare
+                        Sub_Doc : constant BSON_Document_Type := Read_Document;
+                     begin
+                        Add_Document (Result, Key, Sub_Doc);
+                     end;
+
+                  when BSON_TYPE_ARRAY =>
+                     declare
+                        Array_Doc : constant BSON_Document_Type := Read_Document;
+                     begin
+                        Add_Array (Result, Key);
+                        -- Convertir les éléments indexés en éléments de tableau
+                        for C in Array_Doc.Elements.Iterate loop
+                           declare
+                              Value : constant BSON_Value_Access := Value_Maps.Element (C);
+                              Array_Value : BSON_Value_Type := Value.all;
+                           begin
+                              Array_Add_Value (Result, Key, Array_Value);
+                           end;
+                        end loop;
+                     end;
+
+                  when BSON_TYPE_BINARY =>
+                     declare
+                        Data_Length : constant Integer := Read_Int32;
+                        Subtype_Val : constant BSON_Binary_Subtype := BSON_Binary_Subtype (Buffer (Offset));
+                        Binary_Data : Stream_Element_Array (1 .. Stream_Element_Offset (Data_Length));
+                     begin
+                        Offset := Offset + 1; -- Sauter le sous-type
+                        for I in Binary_Data'Range loop
+                           Binary_Data (I) := Buffer (Offset);
+                           Offset := Offset + 1;
+                        end loop;
+                        Add_Binary (Result, Key, Subtype_Val, Binary_Data);
+                     end;
+
+                  when BSON_TYPE_OBJECTID =>
+                     declare
+                        Oid : ObjectId_Type;
+                        Hex_Chars : constant String := "0123456789ABCDEF";
+                     begin
+                        for I in 0 .. 11 loop
+                           declare
+                              B : constant Stream_Element := Buffer (Offset + Stream_Element_Offset (I));
+                              High_Nibble : constant Integer := Integer (B) / 16;
+                              Low_Nibble : constant Integer := Integer (B) mod 16;
+                           begin
+                              Oid (I * 2 + 1) := Hex_Chars (High_Nibble + 1);
+                              Oid (I * 2 + 2) := Hex_Chars (Low_Nibble + 1);
+                           end;
+                        end loop;
+                        Offset := Offset + 12;
+                        Add_ObjectId (Result, Key, Oid);
+                     end;
+
+                  when BSON_TYPE_BOOLEAN =>
+                     Add_Boolean (Result, Key, Buffer (Offset) /= 0);
+                     Offset := Offset + 1;
+
+                  when BSON_TYPE_DATE =>
+                     Add_Date (Result, Key, Read_Int64);
+
+                  when BSON_TYPE_NULL =>
+                     declare
+                        Null_Value : constant BSON_Value_Access :=
+                          new BSON_Value_Type'(Kind => BSON_Null);
+                     begin
+                        Result.Elements.Insert (To_Unbounded_String (Key), Null_Value);
+                     end;
+
+                  when BSON_TYPE_INT32 =>
+                     Add_Integer (Result, Key, Read_Int32);
+
+                  when BSON_TYPE_INT64 =>
+                     Add_Long_Integer (Result, Key, Read_Int64);
+
+                  when others =>
+                     raise Invalid_BSON_Format with "Unsupported BSON type: " &
+                       Element_Type'Image;
+               end case;
+            end;
+         end loop;
+
+         -- Vérifier le terminateur
+         if Buffer (Offset) /= 0 then
+            raise Invalid_BSON_Format with "Document not properly terminated";
+         end if;
+
+         Offset := End_Offset;
+         return Result;
+      end Read_Document;
+   begin
+      Init_Document (Doc);
+
+      -- Vérifier que le buffer a au moins 5 octets (taille + terminateur)
+      if Buffer'Length < 5 then
+         raise Invalid_BSON_Format with "Buffer too small";
+      end if;
+
+      Doc := Read_Document;
+      return Doc;
+   exception
+      when E : others =>
+         -- En cas d'erreur, retourner un document vide
+         Free (Doc);
+         Init_Document (Doc);
+         return Doc;
+   end From_Binary;
+
+   function Is_Valid (Doc : BSON_Document_Type) return Boolean is
+   begin
+      -- Implémentation simple: vérifie que le document est initialisé
+      return Doc.Elements /= Value_Maps.Empty_Map;
+   end Is_Valid;
+
+   procedure Validate (Doc : BSON_Document_Type) is
+   begin
+      if not Is_Valid (Doc) then
+         raise BSON_Validation_Error with "Invalid BSON document";
+      end if;
+   end Validate;
+
+   procedure Free_Value (Value : in out BSON_Value_Access) is
+      procedure Free is new Ada.Unchecked_Deallocation
+        (BSON_Value_Type, BSON_Value_Access);
+   begin
+      if Value = null then
+         return;
+      end if;
+
+      case Value.Kind is
+         when BSON_Document =>
+            if Value.Document_Value /= null then
+               Free_Document (Value.Document_Value.all);
+               declare
+                  procedure Free_Doc is new Ada.Unchecked_Deallocation
+                    (BSON_Document_Type, BSON_Document_Access);
+               begin
+                  Free_Doc (Value.Document_Value);
+               end;
+            end if;
+         when BSON_Array =>
+            -- Libérer chaque élément du tableau
+            for I in 0 .. Natural (Value.Array_Value.Length) - 1 loop
+               declare
+                  Element : BSON_Value_Access := Value.Array_Value (I);
+               begin
+                  Free_Value (Element);
+               end;
+            end loop;
+            Value.Array_Value.Clear;
+         when BSON_Binary =>
+            Value.Binary_Data.Clear;
+         when others =>
+            null; -- Pas de libération spéciale pour les autres types
+      end case;
+
+      Free (Value);
+   end Free_Value;
+
+   procedure Free_Document (Doc : in out BSON_Document_Type) is
+   begin
+      -- Libérer tous les éléments
+      for C in Doc.Elements.Iterate loop
+         declare
+            Value : BSON_Value_Access := Value_Maps.Element (C);
+         begin
+            Free_Value (Value);
+         end;
+      end loop;
+
+      -- Vider la map
+      Doc.Elements.Clear;
+   end Free_Document;
+
+   procedure Free (Doc : in out BSON_Document_Type) is
+   begin
+      Free_Document (Doc);
+   end Free;
+end BSON;
