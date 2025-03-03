@@ -26,16 +26,16 @@ is
       BSON_Null,
       BSON_Int32,
       BSON_Int64,
-      BSON_Undefined,     -- Type déprécié (0x06)
-      BSON_Regex,         -- Expression régulière (0x0B)
-      BSON_DBPointer,     -- Type déprécié (0x0C)
-      BSON_JavaScript,    -- Code JavaScript (0x0D)
-      BSON_Symbol,        -- Type déprécié (0x0E)
-      BSON_JavaScript_W_Scope, -- JavaScript avec scope (0x0F)
-      BSON_Timestamp,     -- Timestamp interne MongoDB (0x11)
-      BSON_Decimal128,    -- Nombre décimal 128 bits (0x13)
-      BSON_MinKey,        -- Valeur minimale pour le tri (0xFF)
-      BSON_MaxKey         -- Valeur maximale pour le tri (0x7F)
+      BSON_Undefined,     --  Type déprécié (0x06)
+      BSON_Regex,         --  Expression régulière (0x0B)
+      BSON_DBPointer,     --  Type déprécié (0x0C)
+      BSON_JavaScript,    --  Code JavaScript (0x0D)
+      BSON_Symbol,        --  Type déprécié (0x0E)
+      BSON_JavaScript_W_Scope, --  JavaScript avec scope (0x0F)
+      BSON_Timestamp,     --  Timestamp interne MongoDB (0x11)
+      BSON_Decimal128,    --  Nombre décimal 128 bits (0x13)
+      BSON_MinKey,        --  Valeur minimale pour le tri (0xFF)
+      BSON_MaxKey         --  Valeur maximale pour le tri (0x7F)
      );
 
    --  Types for binary data
@@ -67,14 +67,14 @@ is
 
    --  Type pour les timestamps MongoDB
    type Timestamp_Type is record
-      Increment : Unsigned_32; -- Compteur incrémental
-      Seconds   : Unsigned_32; -- Secondes depuis l'epoch
+      Increment : Unsigned_32; --  Compteur incrémental
+      Seconds   : Unsigned_32; --  Secondes depuis l'epoch
    end record;
 
    --  Type pour les expressions régulières
    type Regex_Type is record
-      Pattern : Unbounded_String; -- Motif de l'expression régulière
-      Options : Unbounded_String; -- Options (i, m, x, etc.)
+      Pattern : Unbounded_String; --  Motif de l'expression régulière
+      Options : Unbounded_String; --  Options (i, m, x, etc.)
    end record;
 
    --  Type pour JavaScript avec scope
@@ -85,7 +85,7 @@ is
 
    --  Type pour Decimal128
    subtype Decimal128_Type is
-     Stream_Element_Array (1 .. 16); -- 128 bits (16 bytes)
+     Stream_Element_Array (1 .. 16); --  128 bits (16 bytes)
 
    type BSON_Value_Type (Kind : BSON_Type := BSON_Null) is record
       case Kind is
@@ -143,7 +143,7 @@ is
             Pointer_Id : ObjectId_Type;
 
          when others =>
-            null; -- BSON_Null, BSON_Undefined, BSON_MinKey, BSON_MaxKey
+            null; --  BSON_Null, BSON_Undefined, BSON_MinKey, BSON_MaxKey
       end case;
    end record;
 
