@@ -10,3 +10,7 @@ website = ""
 tags = []
 
 executables = ["my_ada_project"]
+
+[[depends-on]]
+gnatprove = "^14.1.1"
+

@@ -1035,7 +1035,8 @@ is
          end loop;
          Offset := Offset + 8;
 
-         --  Traitement des valeurs spéciales en utilisant une approche sans division
+         --  Traitement des valeurs spéciales
+         --  en utilisant une approche sans division
          if Raw_Bits = POS_ZERO then
             Result := 0.0;  --  +0.0
          elsif Raw_Bits = NEG_ZERO then
@@ -1145,7 +1146,8 @@ is
                      begin
                         Add_Array (Result, Key);
 
-                        --  Convertir les éléments indexés en éléments de tableau
+                        --  Convertir les éléments indexés
+                        --  en éléments de tableau
                         for C in Array_Doc.Elements.Iterate loop
                            declare
 
