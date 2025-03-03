@@ -1,6 +1,7 @@
 --     src/bson.adb
 with Ada.Strings.Fixed;
 with Ada.Unchecked_Deallocation;
+with Ada.Unchecked_Conversion;
 
 package body BSON
   with SPARK_Mode => Off
@@ -50,6 +51,7 @@ is
       New_Value : constant BSON_Value_Access :=
         new BSON_Value_Type'(Kind => BSON_Int32, Int32_Value => Value);
    begin
+
       Doc.Elements.Insert (To_Unbounded_String (Key), New_Value);
    end Add_Integer;
 
@@ -59,6 +61,7 @@ is
       New_Value : constant BSON_Value_Access :=
         new BSON_Value_Type'(Kind => BSON_Int64, Int64_Value => Value);
    begin
+
       Doc.Elements.Insert (To_Unbounded_String (Key), New_Value);
    end Add_Long_Integer;
 
@@ -68,6 +71,7 @@ is
       New_Value : constant BSON_Value_Access :=
         new BSON_Value_Type'(Kind => BSON_Double, Double_Value => Value);
    begin
+
       Doc.Elements.Insert (To_Unbounded_String (Key), New_Value);
    end Add_Double;
 
@@ -77,6 +81,7 @@ is
       New_Value : constant BSON_Value_Access :=
         new BSON_Value_Type'(Kind => BSON_Boolean, Boolean_Value => Value);
    begin
+
       Doc.Elements.Insert (To_Unbounded_String (Key), New_Value);
    end Add_Boolean;
 
@@ -181,6 +186,7 @@ is
           (Kind             => BSON_JavaScript,
            JavaScript_Value => To_Unbounded_String (Code));
    begin
+
       Doc.Elements.Insert (To_Unbounded_String (Key), New_Value);
    end Add_JavaScript;
 
@@ -371,15 +377,11 @@ is
 
             when BSON_JavaScript =>
                return
-                 "{""$code"":"""
-                 & To_String (Value.JavaScript_Value)
-                 & """}";
+                 "{""$code"":""" & To_String (Value.JavaScript_Value) & """}";
 
             when BSON_Symbol =>
                return
-                 "{""$symbol"":"""
-                 & To_String (Value.Symbol_Value)
-                 & """}";
+                 "{""$symbol"":""" & To_String (Value.Symbol_Value) & """}";
 
             when BSON_JavaScript_W_Scope =>
                return
@@ -392,15 +394,19 @@ is
             when BSON_Timestamp =>
                declare
                   Seconds_Str : constant String :=
-                    Trim (Value.Timestamp_Value.Seconds'Image,
-                         Ada.Strings.Left);
-                  Incr_Str : constant String :=
-                    Trim (Value.Timestamp_Value.Increment'Image,
-                         Ada.Strings.Left);
+                    Trim
+                      (Value.Timestamp_Value.Seconds'Image, Ada.Strings.Left);
+                  Incr_Str    : constant String :=
+                    Trim
+                      (Value.Timestamp_Value.Increment'Image,
+                       Ada.Strings.Left);
                begin
                   return
-                    "{""$timestamp"":{""t"":" & Seconds_Str
-                    & ", ""i"":" & Incr_Str & "}}";
+                    "{""$timestamp"":{""t"":"
+                    & Seconds_Str
+                    & ", ""i"":"
+                    & Incr_Str
+                    & "}}";
                end;
 
             when BSON_Decimal128 =>
@@ -483,14 +489,31 @@ is
       Offset : in out Stream_Element_Offset;
       Value  : Long_Float)
    is
-      --  Simplification: conversion réelle requiert IEEE 754
-      Int64_Value : constant Unsigned_64 :=
-        Unsigned_64 (Long_Long_Integer (Value * 1_000.0));
+      --  Conversion IEEE 754 pour les doubles
+      function To_U64 is new
+        Ada.Unchecked_Conversion (Long_Float, Unsigned_64);
+      Raw_Bits : Unsigned_64;
    begin
-      --  Format little-endian
+      --  Gestion des cas spéciaux selon la norme IEEE 754
+      if Value = 0.0 then
+         Raw_Bits := 0;  --  +0.0 en IEEE 754
+      elsif not Value'Valid then
+         Raw_Bits := 16#7FF8_0000_0000_0000#;
+         --  NaN (Not-a-Number)
+
+      elsif Value > 0.0 and then Value > Long_Float'Last then
+         Raw_Bits := 16#7FF0_0000_0000_0000#;  --  +Infinity
+      elsif Value < 0.0 and then Value < Long_Float'First then
+         Raw_Bits := 16#FFF0_0000_0000_0000#;  --  -Infinity
+      else
+         --  Valeur normale
+         Raw_Bits := To_U64 (Value);
+      end if;
+
+      --  Format little-endian (octets inversés pour BSON)
       for I in 0 .. 7 loop
          Buffer (Offset + Stream_Element_Offset (I)) :=
-           Stream_Element ((Int64_Value / (2**(8 * I))) and 16#FF#);
+           Stream_Element ((Raw_Bits / (2**(8 * I))) and 16#FF#);
       end loop;
       Offset := Offset + 8;
    end Write_Double;
@@ -550,6 +573,7 @@ is
          begin
             case Value.Kind is
                when BSON_Double =>
+
                   return 8;
 
                when BSON_String =>
@@ -597,7 +621,8 @@ is
                   return 4 + 1 + Integer (Value.Binary_Data.Length);
 
                when BSON_ObjectId =>
-                  return 12; --  ObjectId est toujours 12 octets
+                  return 12;
+                  --  ObjectId est toujours 12 octets
 
                when BSON_Date =>
                   return 8; --  Date est un Int64
@@ -646,7 +671,8 @@ is
                   return 16; --  128 bits (16 octets)
 
                when BSON_MinKey | BSON_MaxKey =>
-                  return 0; --  Pas de données pour MinKey/MaxKey
+                  return 0;
+                  --  Pas de données pour MinKey/MaxKey
             end case;
          end Value_Size;
       begin
@@ -790,6 +816,7 @@ is
                when BSON_Date =>
                   B (Offset) := BSON_TYPE_DATE;
                   Offset := Offset + 1;
+
                   Write_CString (B, Offset, Key);
                   Write_Int64 (B, Offset, Value.Date_Value);
 
@@ -833,6 +860,7 @@ is
                   Offset := Offset + 1;
                   Write_CString (B, Offset, Key);
                   --  Écrire le code JavaScript comme String
+
                   Write_String (B, Offset, To_String (Value.JavaScript_Value));
 
                when BSON_Symbol =>
@@ -879,6 +907,7 @@ is
                   Write_Int32
                     (B, Offset, Integer (Value.Timestamp_Value.Increment));
                   --  Écrire les secondes (4 octets)
+
                   Write_Int32
                     (B, Offset, Integer (Value.Timestamp_Value.Seconds));
 
@@ -935,6 +964,7 @@ is
       Doc_Total_Size := Calculate_Size (Doc);
 
       --  Vérifier si le buffer est suffisamment grand
+
       if Doc_Total_Size > Buffer'Length then
          raise Constraint_Error with "Buffer too small";
       end if;
@@ -979,10 +1009,55 @@ is
       end Read_Int64;
 
       function Read_Double return Long_Float is
-         --  Simplification: conversion réelle requiert IEEE 754
-         Value : constant Long_Long_Integer := Read_Int64;
+         Raw_Bits         : Unsigned_64 := 0;
+         function To_Float is new
+           Ada.Unchecked_Conversion (Unsigned_64, Long_Float);
+         function To_Long_Float is new
+           Ada.Unchecked_Conversion (Unsigned_64, Long_Float);
+         --  Constantes pour les valeurs IEEE 754 spéciales
+         POS_INF          : constant Unsigned_64 := 16#7FF0_0000_0000_0000#;
+         NEG_INF          : constant Unsigned_64 := 16#FFF0_0000_0000_0000#;
+         NAN_MASK         : constant Unsigned_64 := 16#7FF0_0000_0000_0000#;
+         NAN_PAYLOAD_MASK : constant Unsigned_64 := 16#000F_FFFF_FFFF_FFFF#;
+         NAN_VALUE        : constant Unsigned_64 := 16#7FF8_0000_0000_0000#;
+         POS_ZERO         : constant Unsigned_64 := 0;
+         NEG_ZERO         : constant Unsigned_64 := 16#8000_0000_0000_0000#;
+
+         --  Variable pour stocker le résultat
+         Result : Long_Float;
       begin
-         return Long_Float (Value) / 1_000.0;
+         --  Format little-endian
+         for I in 0 .. 7 loop
+            Raw_Bits :=
+              Raw_Bits
+              + (Unsigned_64 (Buffer (Offset + Stream_Element_Offset (I)))
+                 * (2**(8 * I)));
+         end loop;
+         Offset := Offset + 8;
+
+         --  Traitement des valeurs spéciales en utilisant une approche sans division
+         if Raw_Bits = POS_ZERO then
+            Result := 0.0;  --  +0.0
+         elsif Raw_Bits = NEG_ZERO then
+            Result := -0.0; --  -0.0
+         elsif Raw_Bits = POS_INF then
+            --  +Infinity: utiliser la valeur la plus grande possible
+            Result := Long_Float'Last;
+         elsif Raw_Bits = NEG_INF then
+            --  -Infinity: utiliser la valeur la plus petite possible
+            Result := Long_Float'First;
+         elsif (Raw_Bits and NAN_MASK) = NAN_MASK
+           and then (Raw_Bits and NAN_PAYLOAD_MASK) /= 0
+         then
+            --  NaN: utiliser une valeur non définie
+
+            Result := To_Long_Float (NAN_VALUE);
+         else
+            --  Valeur normale
+            Result := To_Float (Raw_Bits);
+         end if;
+
+         return Result;
       end Read_Double;
 
       function Read_CString return String is
@@ -1069,13 +1144,14 @@ is
                           Read_Document;
                      begin
                         Add_Array (Result, Key);
-                        --  Convertir les éléments indexés
-                        --  en éléments de tableau
+
+                        --  Convertir les éléments indexés en éléments de tableau
                         for C in Array_Doc.Elements.Iterate loop
                            declare
+
                               Value_Access : constant BSON_Value_Access :=
                                 Value_Maps.Element (C);
-                              Array_Value : constant BSON_Value_Type :=
+                              Array_Value  : constant BSON_Value_Type :=
                                 Value_Access.all;
                            begin
                               Array_Add_Value (Result, Key, Array_Value);
@@ -1096,7 +1172,9 @@ is
                            raise Invalid_BSON_Format
                              with "Binary data exceeds buffer size";
                         end if;
-                        Offset := Offset + 1; --  Sauter le sous-type
+                        Offset := Offset + 1;
+                        --  Sauter le sous-type
+
                         declare
                            Binary_Data :
                              Stream_Element_Array
@@ -1109,9 +1187,7 @@ is
                                  --  Do nothing if Data_Length is 0
                                  null;
                               else
-                                 Binary_Data (I) :=
-                                   Buffer
-                                     (Offset);  --  Correct, I est du bon type
+                                 Binary_Data (I) := Buffer (Offset);
                                  Offset := Offset + 1;
                               end if;
                            end loop;
@@ -1126,11 +1202,13 @@ is
                      begin
                         for I in 0 .. 11 loop
                            declare
+
                               B           : constant Stream_Element :=
                                 Buffer (Offset + Stream_Element_Offset (I));
                               High_Nibble : constant Integer :=
                                 Integer (B) / 16;
-                              Low_Nibble  : constant Integer :=
+
+                              Low_Nibble : constant Integer :=
                                 Integer (B) mod 16;
                            begin
                               Oid (I * 2 + 1) := Hex_Chars (High_Nibble + 1);
@@ -1176,11 +1254,13 @@ is
                      begin
                         for I in 0 .. 11 loop
                            declare
+
                               B           : constant Stream_Element :=
                                 Buffer (Offset + Stream_Element_Offset (I));
                               High_Nibble : constant Integer :=
                                 Integer (B) / 16;
-                              Low_Nibble  : constant Integer :=
+
+                              Low_Nibble : constant Integer :=
                                 Integer (B) mod 16;
                            begin
                               Oid (I * 2 + 1) := Hex_Chars (High_Nibble + 1);
@@ -1199,16 +1279,16 @@ is
 
                   when BSON_TYPE_JAVASCRIPT_W_SCOPE =>
                      declare
-                        Code       : constant String := Read_String;
-                        Scope_Doc  : constant BSON_Document_Type
-                        := Read_Document;
-                        --  Variables qui sert à stocker le
-                        --  résultat de Read_Int32
-                        Unused     : Integer;
+                        Code      : constant String := Read_String;
+                        Scope_Doc : constant BSON_Document_Type :=
+                          Read_Document;
+                        --  Variables qui sert à stocker le résultat
+
+                        Unused : Integer;
                      begin
                         --  Ignorer Total_Size du format BSON
-                        --  mais rester conforme
-                        --  avec le standard qui l'inclut
+
+                        --  mais rester conforme avec le standard
                         Unused := Read_Int32;
                         Add_JavaScript_W_Scope (Result, Key, Code, Scope_Doc);
                      end;
@@ -1217,8 +1297,10 @@ is
                      declare
                         Increment : constant Unsigned_32 :=
                           Unsigned_32 (Read_Int32);
-                        Seconds   : constant Unsigned_32 :=
+
+                        Seconds : constant Unsigned_32 :=
                           Unsigned_32 (Read_Int32);
+
                      begin
                         Add_Timestamp (Result, Key, Seconds, Increment);
                      end;
@@ -1249,6 +1331,7 @@ is
 
          --  Vérifier le terminateur
          if Buffer (Offset) /= 0 then
+
             raise Invalid_BSON_Format with "Document not properly terminated";
          end if;
 
@@ -1258,9 +1341,9 @@ is
    begin
       Init_Document (Doc);
 
-      --  Vérifier que le buffer a au moins
-      --  5 octets (taille + terminateur)
+      --  Vérifier que le buffer a au moins 5 octets (taille + terminateur)
       if Buffer'Length < 5 then
+
          raise Invalid_BSON_Format with "Buffer too small";
       end if;
 
@@ -1289,8 +1372,9 @@ is
                when BSON_Array =>
                   for I in 0 .. Natural (Value.Array_Value.Length) - 1 loop
                      declare
-                        Element : constant BSON_Value_Access
-                        := Value.Array_Value (I);
+
+                        Element : constant BSON_Value_Access :=
+                          Value.Array_Value (I);
                      begin
                         if Element = null then
                            return False;
@@ -1339,6 +1423,7 @@ is
             --  Libérer chaque élément du tableau
             for I in 0 .. Natural (Value.Array_Value.Length) - 1 loop
                declare
+
                   Element : BSON_Value_Access := Value.Array_Value (I);
                begin
                   Free_Value (Element);
