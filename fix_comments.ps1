@@ -20,21 +20,21 @@ foreach ($file in $adaFiles) {
     $fileName = $file.Name
     Write-Host "Traitement de $fileName..." -NoNewline
     $modified = $false
-    
+
     # Lire toutes les lignes du fichier
     $lines = [System.IO.File]::ReadAllLines($file.FullName)
     $newLines = @()
-    
+
     foreach ($line in $lines) {
         # Cherche les lignes contenant des commentaires
         if ($line -match "--") {
             # Diviser la ligne au premier commentaire
             $parts = $line -split "--", 2
-            
+  
             if ($parts.Count -eq 2) {
                 $beforeComment = $parts[0]
                 $afterComment = $parts[1]
-                
+         
                 # Si le commentaire commence par un espace, ajouter un espace supplémentaire
                 if ($afterComment.StartsWith(" ") -and -not $afterComment.StartsWith("  ")) {
                     $afterComment = " " + $afterComment
@@ -53,11 +53,11 @@ foreach ($file in $adaFiles) {
                 }
             }
         }
-        
+   
         # Si on n'a pas modifié la ligne, l'ajouter telle quelle
         $newLines += $line
     }
-    
+
     # Si des modifications ont été apportées, écrire le fichier
     if ($modified) {
         [System.IO.File]::WriteAllLines($file.FullName, $newLines)
@@ -67,7 +67,7 @@ foreach ($file in $adaFiles) {
     else {
         Write-Host " Aucune modification nécessaire" -ForegroundColor Gray
     }
-    
+
     $count++
 }
 

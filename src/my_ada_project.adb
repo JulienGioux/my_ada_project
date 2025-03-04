@@ -1,6 +1,7 @@
 with Ada.Text_IO;           use Ada.Text_IO;
 with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
 with BSON;                 use BSON;
+with BSON_Exceptions;      use BSON_Exceptions;
 
 procedure My_Ada_Project is
    Doc     : BSON_Document_Type;

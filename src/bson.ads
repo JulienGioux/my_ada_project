@@ -1,4 +1,3 @@
---    src/bson.ads
 with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
 with Ada.Containers.Vectors;
 with Ada.Containers.Ordered_Maps;
@@ -8,10 +7,11 @@ with Interfaces;            use Interfaces;
 package BSON
   with SPARK_Mode => Off
 is
-   --  Exceptions
-   Invalid_BSON_Format   : exception;
-   Invalid_BSON_Type     : exception;
-   BSON_Validation_Error : exception;
+   --  Sous-types pour la validation
+   subtype Valid_Buffer_Size is Integer range 5 .. Integer'Last;
+   subtype Valid_Array_Index is Integer range 0 .. Integer'Last;
+   subtype Valid_String_Length is Integer range 0 .. Integer'Last;
+   subtype Valid_Document_Size is Stream_Element_Offset range 5 .. Stream_Element_Offset'Last;
 
    --  Types
    type BSON_Type is
@@ -30,13 +30,12 @@ is
       BSON_Regex,         --  Expression régulière (0x0B)
       BSON_DBPointer,     --  Type déprécié (0x0C)
       BSON_JavaScript,    --  Code JavaScript (0x0D)
-      BSON_Symbol,        --  Type déprécié (0x0E)
-      BSON_JavaScript_W_Scope, --  JavaScript avec scope (0x0F)
-      BSON_Timestamp,     --  Timestamp interne MongoDB (0x11)
-      BSON_Decimal128,    --  Nombre décimal 128 bits (0x13)
-      BSON_MinKey,        --  Valeur minimale pour le tri (0xFF)
-      BSON_MaxKey         --  Valeur maximale pour le tri (0x7F)
-     );
+      BSON_Symbol,        --  Symbole
+      BSON_JavaScript_W_Scope,  --  JavaScript avec scope
+      BSON_Timestamp,     --  Timestamp interne MongoDB
+      BSON_Decimal128,    --  Decimal128
+      BSON_MinKey,        --  Type spécial MongoDB (-inf)
+      BSON_MaxKey);       --  Type spécial MongoDB (+inf)
 
    --  Types for binary data
    type BSON_Binary_Subtype is new Stream_Element range 0 .. 255;
@@ -231,7 +230,9 @@ is
       ObjectId   : ObjectId_Type);
 
    procedure Array_Add_Value
-     (Doc : in out BSON_Document_Type; Key : String; Value : BSON_Value_Type);
+     (Doc : in out BSON_Document_Type; Key : String; Value : BSON_Value_Type)
+   with
+     Pre => Key'Length > 0;
 
    function To_JSON (Doc : BSON_Document_Type) return String;
 
@@ -242,10 +243,15 @@ is
    procedure To_Binary
      (Doc    : in out BSON_Document_Type;
       Buffer : out Stream_Element_Array;
-      Last   : out Stream_Element_Offset);
+      Last   : out Stream_Element_Offset)
+   with
+     Pre  => Buffer'Length >= 5,  --  Minimum BSON document size
+     Post => Last <= Buffer'Last;
 
    function From_Binary
-     (Buffer : Stream_Element_Array) return BSON_Document_Type;
+     (Buffer : Stream_Element_Array) return BSON_Document_Type
+   with
+     Pre => Buffer'Length >= 5;  --  Minimum BSON document size
 
    procedure Free (Doc : in out BSON_Document_Type);
 
