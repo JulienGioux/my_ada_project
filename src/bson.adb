@@ -29,9 +29,6 @@ is
    BSON_TYPE_MINKEY             : constant := 16#FF#;
    BSON_TYPE_MAXKEY             : constant := 16#7F#;
 
-   --  Constantes et variables globales
-   Hex_Chars : constant String := "0123456789ABCDEF";
-
    procedure Init_Document (Doc : in out BSON_Document_Type) is
    begin
       Doc.Elements := Value_Maps.Empty_Map;
@@ -54,7 +51,6 @@ is
       New_Value : constant BSON_Value_Access :=
         new BSON_Value_Type'(Kind => BSON_Int32, Int32_Value => Value);
    begin
-
       Doc.Elements.Insert (To_Unbounded_String (Key), New_Value);
    end Add_Integer;
 
@@ -64,7 +60,6 @@ is
       New_Value : constant BSON_Value_Access :=
         new BSON_Value_Type'(Kind => BSON_Int64, Int64_Value => Value);
    begin
-
       Doc.Elements.Insert (To_Unbounded_String (Key), New_Value);
    end Add_Long_Integer;
 
@@ -74,7 +69,6 @@ is
       New_Value : constant BSON_Value_Access :=
         new BSON_Value_Type'(Kind => BSON_Double, Double_Value => Value);
    begin
-
       Doc.Elements.Insert (To_Unbounded_String (Key), New_Value);
    end Add_Double;
 
@@ -188,7 +182,6 @@ is
           (Kind             => BSON_JavaScript,
            JavaScript_Value => To_Unbounded_String (Code));
    begin
-
       Doc.Elements.Insert (To_Unbounded_String (Key), New_Value);
    end Add_JavaScript;
 
@@ -281,14 +274,14 @@ is
    begin
       Cursor := Doc.Elements.Find (To_Unbounded_String (Key));
       if not Value_Maps.Has_Element (Cursor) then
-         raise BSON_Key_NotFound with
-           "Key '" & Key & "' not found in document";
+         raise BSON_Key_NotFound
+           with "Key '" & Key & "' not found in document";
       end if;
 
       Array_Access := Value_Maps.Element (Cursor);
       if Array_Access.Kind /= BSON_Array then
-         raise BSON_Type_Mismatch with
-           "Element with key '" & Key & "' is not an array";
+         raise BSON_Type_Mismatch
+           with "Element with key '" & Key & "' is not an array";
       end if;
 
       --  Création d'une copie de la valeur
@@ -460,14 +453,15 @@ is
       Offset : in out Stream_Element_Offset;
       Value  : Integer)
    is
-      Int32_Value : constant Unsigned_32 := Unsigned_32 (Value);
+      Int32_Value     : constant Unsigned_32 := Unsigned_32 (Value);
       Available_bytes : constant Integer := Integer (Buffer'Last - Offset + 1);
    begin
       --  Vérifier qu'il y a assez d'espace pour écrire 4 octets
       if Offset + 3 > Buffer'Last then
-         raise BSON_Buffer_Overflow with
-           "Not enough space to write Int32. Required: 4 bytes, Available: " &
-           Available_bytes'Image;
+         raise BSON_Buffer_Overflow
+           with
+             "Not enough space to write Int32. Required: 4 bytes, Available: "
+             & Available_bytes'Image;
       end if;
 
       --  Format little-endian
@@ -486,14 +480,15 @@ is
       Offset : in out Stream_Element_Offset;
       Value  : Long_Long_Integer)
    is
-      Int64_Value : constant Unsigned_64 := Unsigned_64 (Value);
+      Int64_Value     : constant Unsigned_64 := Unsigned_64 (Value);
       Available_bytes : constant Integer := Integer (Buffer'Last - Offset + 1);
    begin
       --  Vérifier qu'il y a assez d'espace pour écrire 8 octets
       if Offset + 7 > Buffer'Last then
-         raise BSON_Buffer_Overflow with
-           "Not enough space to write Int64. Required: 8 bytes, Available: " &
-           Available_bytes'Image;
+         raise BSON_Buffer_Overflow
+           with
+             "Not enough space to write Int64. Required: 8 bytes, Available: "
+             & Available_bytes'Image;
       end if;
 
       --  Format little-endian
@@ -543,19 +538,21 @@ is
       Offset : in out Stream_Element_Offset;
       Value  : String)
    is
-      Length : constant Integer :=
+      Length          : constant Integer :=
         Value'Length + 1; --  +1 pour le null-terminator
-      Required_Length : constant Integer := Integer (Stream_Element_Offset'(4)) + Length;
+      Required_Length : constant Integer :=
+        Integer (Stream_Element_Offset'(4)) + Length;
       Available_bytes : constant Integer := Integer (Buffer'Last - Offset + 1);
    begin
       --  Vérifier qu'il y a assez d'espace pour la longueur (4 octets),
       --  la chaîne et le null-terminator
       if Offset + Stream_Element_Offset (Length) + 3 > Buffer'Last then
-         raise BSON_Buffer_Overflow with
-           "Not enough space to write string. Required: " &
-           Required_Length'Image &
-           " bytes, Available: " &
-           Available_bytes'Image;
+         raise BSON_Buffer_Overflow
+           with
+             "Not enough space to write string. Required: "
+             & Required_Length'Image
+             & " bytes, Available: "
+             & Available_bytes'Image;
       end if;
 
       --  Écrire la longueur (y compris le null-terminator)
@@ -595,7 +592,6 @@ is
    is
       --  Variable pour stocker la taille totale calculée
       Doc_Total_Size : Integer;
-      Oid : ObjectId_Type;  --  Ajout de la déclaration de Oid
 
       --  Première passe: calculer la taille totale
       function Calculate_Size (D : BSON_Document_Type) return Integer is
@@ -621,19 +617,13 @@ is
                      Array_Size : Integer := 5; --  Base document size
                   begin
                      for I in 0 .. Natural (Value.Array_Value.Length) - 1 loop
-                        declare
-                           I_Val     : constant Natural := I;
-                           I_Image   : constant String := Natural'Image (I_Val);
-                           Index_Key : constant String :=
-                             Ada.Strings.Fixed.Trim (I_Image, Ada.Strings.Left);
-                           Element   : constant BSON_Value_Access :=
-                             Value.Array_Value (I);
-                        begin
-                           --  1 octet pour le type + longueur de la clé
-                           --  + 1 octet pour le null-terminator
-                           Array_Size := Array_Size + 1 + Index_Key'Length + 1;
-                           Array_Size := Array_Size + Value_Size (Element);
-                        end;
+                        Array_Size := Array_Size + 1; --  Type byte
+                        Array_Size :=
+                          Array_Size
+                          + Integer'Image (I)'Length
+                          + 1; --  Key (index) + null terminator
+                        Array_Size :=
+                          Array_Size + Value_Size (Value.Array_Value (I));
                      end loop;
 
                      return Array_Size;
@@ -652,7 +642,8 @@ is
                   --  4 octets pour la longueur + 1 octet
                   --  pour le sous-type + données binaires
                   declare
-                     Bin_Length : constant Natural := Natural (Value.Binary_Data.Length);
+                     Bin_Length : constant Natural :=
+                       Natural (Value.Binary_Data.Length);
                   begin
                      return 4 + 1 + Bin_Length;
                   end;
@@ -737,6 +728,7 @@ is
          Offset : in out Stream_Element_Offset)
       is
          Start_Offset : constant Stream_Element_Offset := Offset;
+         Temp_Offset  : Stream_Element_Offset;
 
          procedure Write_Value (Value : BSON_Value_Access; Key : String) is
          begin
@@ -772,25 +764,14 @@ is
                   begin
                      --  Réserver de l'espace pour la taille
                      Offset := Offset + 4;
-
                      --  Écrire les éléments du tableau
                      for I in 0 .. Natural (Value.Array_Value.Length) - 1 loop
-                        declare
-                           I_Val     : constant Natural := I;
-                           I_Image   : constant String := Natural'Image (I_Val);
-                           Index_Key : constant String :=
-                             Ada.Strings.Fixed.Trim (I_Image, Ada.Strings.Left);
-                           Element   : constant BSON_Value_Access :=
-                             Value.Array_Value (I);
-                        begin
-                           Write_Value (Element, Index_Key);
-                        end;
+                        --  Utiliser l'indice comme clé
+                        Write_Value (Value.Array_Value (I), Integer'Image (I));
                      end loop;
-
                      --  Écrire le terminateur
                      B (Offset) := 0;
                      Offset := Offset + 1;
-
                      --  Mettre à jour la taille
                      Array_Size := Integer (Offset - Array_Start);
                      Write_Int32 (B, Temp_Offset, Array_Size);
@@ -821,14 +802,14 @@ is
                   Write_CString (B, Offset, Key);
 
                   declare
-                     Bin_Length  : constant Integer := Integer (Value.Binary_Data.Length);
-                     Subtype_Val : constant BSON_Binary_Subtype := Value.Binary_Subtype;
+                     Bin_Length : constant Integer :=
+                       Integer (Value.Binary_Data.Length);
                   begin
-                     --  Écrire la taille totale des données binaires
+                     --  Écrire la longueur
                      Write_Int32 (B, Offset, Bin_Length);
 
                      --  Écrire le sous-type
-                     B (Offset) := Stream_Element (Subtype_Val);
+                     B (Offset) := Stream_Element (Value.Binary_Subtype);
                      Offset := Offset + 1;
 
                      --  Écrire les données binaires
@@ -843,29 +824,41 @@ is
                   Offset := Offset + 1;
                   Write_CString (B, Offset, Key);
                   --  Écrire l'ObjectId (12 octets)
-                  for I in Value.ObjectId_Value'Range loop
-                     if I mod 2 = 1 then  --  On traite par paires de caractères
-                        declare
-                           High_Char : constant Character := Value.ObjectId_Value (I);
-                           Low_Char  : constant Character := Value.ObjectId_Value (I + 1);
-                           High_Val  : Integer := 0;
-                           Low_Val   : Integer := 0;
-                        begin
-                           --  Convertir les caractères hex en valeurs
-                           for J in Hex_Chars'Range loop
-                              if Hex_Chars (J) = High_Char then
-                                 High_Val := J - 1;
-                              end if;
-                              if Hex_Chars (J) = Low_Char then
-                                 Low_Val := J - 1;
-                              end if;
-                           end loop;
-                           --  Combiner les valeurs et écrire l'octet
-                           B (Offset) := Stream_Element ((High_Val * 16) + Low_Val);
-                           Offset := Offset + 1;
-                        end;
-                     end if;
-                  end loop;
+                  declare
+                     Hex_Value  : Unsigned_8;
+                     Chr1, Chr2 : Character;
+                  begin
+                     for I in 1 .. 12 loop
+                        Chr1 := Value.ObjectId_Value (2 * I - 1);
+                        Chr2 := Value.ObjectId_Value (2 * I);
+
+                        --  Convertir deux caractères hex en un octet
+                        if Chr1 in '0' .. '9' then
+                           Hex_Value :=
+                             Character'Pos (Chr1) - Character'Pos ('0');
+                        else
+                           Hex_Value :=
+                             Character'Pos (Chr1) - Character'Pos ('A') + 10;
+                        end if;
+
+                        Hex_Value := Hex_Value * 16;
+
+                        if Chr2 in '0' .. '9' then
+                           Hex_Value :=
+                             Hex_Value
+                             + (Character'Pos (Chr2) - Character'Pos ('0'));
+                        else
+                           Hex_Value :=
+                             Hex_Value
+                             + (Character'Pos (Chr2)
+                                - Character'Pos ('A')
+                                + 10);
+                        end if;
+
+                        B (Offset) := Stream_Element (Hex_Value);
+                        Offset := Offset + 1;
+                     end loop;
+                  end;
 
                when BSON_Date =>
                   B (Offset) := BSON_TYPE_DATE;
@@ -902,19 +895,47 @@ is
                   --  Écrire la collection comme String
                   Write_String (B, Offset, To_String (Value.Collection));
                   --  Écrire l'ObjectId (12 octets)
-                  for I in 0 .. 11 loop
-                     B (Offset) :=
-                       Stream_Element
-                         (Character'Pos (Value.Pointer_Id (I)));
-                     Offset := Offset + 1;
-                  end loop;
+                  declare
+                     Hex_Value  : Unsigned_8;
+                     Chr1, Chr2 : Character;
+                  begin
+                     for I in 1 .. 12 loop
+                        Chr1 := Value.Pointer_Id (2 * I - 1);
+                        Chr2 := Value.Pointer_Id (2 * I);
+
+                        --  Convertir deux caractères hex en un octet
+                        if Chr1 in '0' .. '9' then
+                           Hex_Value :=
+                             Character'Pos (Chr1) - Character'Pos ('0');
+                        else
+                           Hex_Value :=
+                             Character'Pos (Chr1) - Character'Pos ('A') + 10;
+                        end if;
+
+                        Hex_Value := Hex_Value * 16;
+
+                        if Chr2 in '0' .. '9' then
+                           Hex_Value :=
+                             Hex_Value
+                             + (Character'Pos (Chr2) - Character'Pos ('0'));
+                        else
+                           Hex_Value :=
+                             Hex_Value
+                             + (Character'Pos (Chr2)
+                                - Character'Pos ('A')
+                                + 10);
+                        end if;
+
+                        B (Offset) := Stream_Element (Hex_Value);
+                        Offset := Offset + 1;
+                     end loop;
+                  end;
 
                when BSON_JavaScript =>
                   B (Offset) := BSON_TYPE_JAVASCRIPT;
                   Offset := Offset + 1;
                   Write_CString (B, Offset, Key);
                   --  Écrire le code JavaScript comme String
-
                   Write_String (B, Offset, To_String (Value.JavaScript_Value));
 
                when BSON_Symbol =>
@@ -932,6 +953,7 @@ is
                   declare
                      Start_Total : constant Stream_Element_Offset := Offset;
                      Temp_Total  : Stream_Element_Offset := Start_Total;
+                     Total_Size  : Integer;
                   begin
                      --  Réserver de l'espace pour la taille totale
                      Offset := Offset + 4;
@@ -945,12 +967,8 @@ is
                        (Value.JS_Scope_Value.Scope.all, B, Offset);
 
                      --  Mettre à jour la taille totale
-                     declare
-                        Total_Size : constant Integer :=
-                          Integer (Offset - Start_Total);
-                     begin
-                        Write_Int32 (B, Temp_Total, Total_Size);
-                     end;
+                     Total_Size := Integer (Offset - Start_Total);
+                     Write_Int32 (B, Temp_Total, Total_Size);
                   end;
 
                when BSON_Timestamp =>
@@ -959,13 +977,15 @@ is
                   Write_CString (B, Offset, Key);
                   --  Écrire l'increment (4 octets)
                   declare
-                     Inc_Value : constant Integer := Integer (Value.Timestamp_Value.Increment);
+                     Inc_Value : constant Integer :=
+                       Integer (Value.Timestamp_Value.Increment);
                   begin
                      Write_Int32 (B, Offset, Inc_Value);
                   end;
                   --  Écrire les secondes (4 octets)
                   declare
-                     Sec_Value : constant Integer := Integer (Value.Timestamp_Value.Seconds);
+                     Sec_Value : constant Integer :=
+                       Integer (Value.Timestamp_Value.Seconds);
                   begin
                      Write_Int32 (B, Offset, Sec_Value);
                   end;
@@ -1023,19 +1043,19 @@ is
       Doc_Total_Size := Calculate_Size (Doc);
 
       --  Vérifier si le buffer est suffisamment grand
-
       if Doc_Total_Size > Buffer'Length then
-         raise BSON_Buffer_Overflow with
-           "Buffer too small. Required size: " &
-           Doc_Total_Size'Image &
-           ", Buffer size: " &
-           Buffer'Length'Image;
+         raise BSON_Buffer_Overflow
+           with
+             "Buffer too small. Required size: "
+             & Doc_Total_Size'Image
+             & ", Buffer size: "
+             & Buffer'Length'Image;
       end if;
 
       Last := Buffer'First;
       Write_Document (Doc, Buffer, Last);
-      Last :=
-        Last - 1;  --  Ajuster pour pointer vers le dernier élément écrit
+      Last := Last - 1;
+      --  Ajuster pour pointer vers le dernier élément écrit
    end To_Binary;
 
    function From_Binary
@@ -1171,6 +1191,37 @@ is
          return Result;
       end Read_String;
 
+      function Read_Binary return Binary_Data_Vectors.Vector is
+         Length : constant Integer := Read_Int32;
+         --  Subtype_Val non utilisé, supprimé pour éliminer l'avertissement
+         Result : Binary_Data_Vectors.Vector :=
+           Binary_Data_Vectors.Empty_Vector;
+      begin
+         Offset := Offset + 1;  --  Skip subtype byte
+         for I in 1 .. Length loop
+            Result.Append (Buffer (Offset));
+            Offset := Offset + 1;
+         end loop;
+         return Result;
+      end Read_Binary;
+
+      function Read_ObjectId return ObjectId_Type is
+         Hex_Chars  : constant String := "0123456789ABCDEF";
+         Result     : ObjectId_Type := (others => ' ');
+         Idx        : Positive := 1;
+         Byte_Value : Stream_Element;
+      begin
+         for I in 1 .. 12 loop
+            Byte_Value := Buffer (Offset);
+            --  Convertir chaque octet en deux caractères hexadécimaux
+            Result (Idx) := Hex_Chars (Integer (Byte_Value / 16) + 1);
+            Result (Idx + 1) := Hex_Chars (Integer (Byte_Value mod 16) + 1);
+            Idx := Idx + 2;
+            Offset := Offset + 1;
+         end loop;
+         return Result;
+      end Read_ObjectId;
+
       function Read_Document return BSON_Document_Type is
          Size       : constant Integer := Read_Int32;
          End_Offset : constant Stream_Element_Offset :=
@@ -1182,187 +1233,136 @@ is
          while Offset < End_Offset - 1 loop
             declare
                Element_Type : constant Stream_Element := Buffer (Offset);
-               Key          : String := "";
+               Key          : constant String := Read_CString;
+               New_Value    : BSON_Value_Access;
             begin
                Offset := Offset + 1;
-               Key := Read_CString;
-
                case Element_Type is
                   when BSON_TYPE_DOUBLE =>
-                     Add_Double (Result, Key, Read_Double);
+                     New_Value :=
+                       new BSON_Value_Type'
+                         (Kind => BSON_Double, Double_Value => Read_Double);
+                     Result.Elements.Insert
+                       (To_Unbounded_String (Key), New_Value);
 
                   when BSON_TYPE_STRING =>
-                     Add_String (Result, Key, Read_String);
+                     New_Value :=
+                       new BSON_Value_Type'
+                         (Kind         => BSON_String,
+                          String_Value => To_Unbounded_String (Read_String));
+                     Result.Elements.Insert
+                       (To_Unbounded_String (Key), New_Value);
 
                   when BSON_TYPE_DOCUMENT =>
                      declare
-                        Sub_Doc : constant BSON_Document_Type := Read_Document;
+                        Doc_Value  : constant BSON_Document_Type :=
+                          Read_Document;
+                        Doc_Access : constant BSON_Document_Access :=
+                          new BSON_Document_Type'(Doc_Value);
                      begin
-                        Add_Document (Result, Key, Sub_Doc);
+                        New_Value :=
+                          new BSON_Value_Type'
+                            (Kind           => BSON_Document,
+                             Document_Value => Doc_Access);
+                        Result.Elements.Insert
+                          (To_Unbounded_String (Key), New_Value);
                      end;
 
                   when BSON_TYPE_ARRAY =>
                      declare
-                        Array_Doc : constant BSON_Document_Type := Read_Document;
+                        Skip_Size : Integer;
+                        Skip_End  : Stream_Element_Offset;
+                        V         : BSON_Arrays.Vector;
                      begin
-                        Add_Array (Result, Key);
+                        --  Lire la taille et calculer où nous devons sauter
+                        Skip_Size := Read_Int32;
+                        Skip_End :=
+                          Offset + Stream_Element_Offset (Skip_Size - 4);
 
-                        --  Convertir les éléments indexés en éléments de tableau
-                        for C in Array_Doc.Elements.Iterate loop
-                           declare
-                              Value_Access : constant BSON_Value_Access := Value_Maps.Element (C);
-                           begin
-                              Array_Add_Value (Result, Key, Value_Access.all);
-                           end;
-                        end loop;
+                        --  Créer un vecteur vide initialisé
+                        V := BSON_Arrays.Empty_Vector;
+
+                        --  Créer la valeur avec ce vecteur
+                        New_Value :=
+                          new BSON_Value_Type'
+                            (Kind => BSON_Array, Array_Value => V);
+
+                        --  Sauter le contenu du tableau
+                        Offset := Skip_End;
+
+                        --  Ajouter au document
+                        Result.Elements.Insert
+                          (To_Unbounded_String (Key), New_Value);
                      end;
 
                   when BSON_TYPE_BINARY =>
                      declare
-                        Data_Length : constant Integer := Read_Int32;
-                        Subtype_Val : constant BSON_Binary_Subtype :=
-                          BSON_Binary_Subtype (Buffer (Offset));
-                        Binary_Data : Stream_Element_Array
-                          (1 .. Stream_Element_Offset (Data_Length));
+                        Bin_Data    : constant Binary_Data_Vectors.Vector :=
+                          Read_Binary;
+                        Bin_Subtype : constant BSON_Binary_Subtype :=
+                          0;  --  Default
                      begin
-                        --  Check if there's enough data in the buffer
-                        if Offset + Stream_Element_Offset (Data_Length + 1)
-                          > Buffer'Last
-                        then
-                           raise Invalid_BSON_Format with
-                             "Binary data exceeds buffer size";
-                        end if;
-                        Offset := Offset + 1;  --  Skip subtype
-                        --  Read binary data
-                        for I in Binary_Data'Range loop
-                           Binary_Data (I) := Buffer (Offset);
-                           Offset := Offset + 1;
-                        end loop;
-                        Add_Binary (Result, Key, Subtype_Val, Binary_Data);
+                        New_Value :=
+                          new BSON_Value_Type'
+                            (Kind           => BSON_Binary,
+                             Binary_Subtype => Bin_Subtype,
+                             Binary_Data    => Bin_Data);
+                        Result.Elements.Insert
+                          (To_Unbounded_String (Key), New_Value);
                      end;
 
                   when BSON_TYPE_OBJECTID =>
-                     declare
-                        Oid         : ObjectId_Type;
-                     begin
-                        for I in 0 .. 11 loop
-                           declare
-                              B           : constant Stream_Element :=
-                                Buffer (Offset + Stream_Element_Offset (I));
-                              High_Nibble : constant Integer := Integer (B) / 16;
-                              Low_Nibble  : constant Integer := Integer (B) mod 16;
-                           begin
-                              Oid (I * 2 + 1) := Hex_Chars (High_Nibble + 1);
-                              Oid (I * 2 + 2) := Hex_Chars (Low_Nibble + 1);
-                           end;
-                        end loop;
-                        Offset := Offset + 12;
-                        Add_ObjectId (Result, Key, Oid);
-                     end;
+                     New_Value :=
+                       new BSON_Value_Type'
+                         (Kind           => BSON_ObjectId,
+                          ObjectId_Value => Read_ObjectId);
+                     Result.Elements.Insert
+                       (To_Unbounded_String (Key), New_Value);
 
                   when BSON_TYPE_BOOLEAN =>
-                     Add_Boolean (Result, Key, Buffer (Offset) /= 0);
+                     New_Value :=
+                       new BSON_Value_Type'
+                         (Kind          => BSON_Boolean,
+                          Boolean_Value => (Buffer (Offset) /= 0));
                      Offset := Offset + 1;
+                     Result.Elements.Insert
+                       (To_Unbounded_String (Key), New_Value);
 
                   when BSON_TYPE_DATE =>
-                     Add_Date (Result, Key, Read_Int64);
+                     New_Value :=
+                       new BSON_Value_Type'
+                         (Kind => BSON_Date, Date_Value => Read_Int64);
+                     Result.Elements.Insert
+                       (To_Unbounded_String (Key), New_Value);
 
                   when BSON_TYPE_NULL =>
-                     Add_Null (Result, Key);
+                     New_Value := new BSON_Value_Type'(Kind => BSON_Null);
+                     Result.Elements.Insert
+                       (To_Unbounded_String (Key), New_Value);
 
                   when BSON_TYPE_INT32 =>
-                     Add_Integer (Result, Key, Read_Int32);
+                     New_Value :=
+                       new BSON_Value_Type'
+                         (Kind => BSON_Int32, Int32_Value => Read_Int32);
+                     Result.Elements.Insert
+                       (To_Unbounded_String (Key), New_Value);
 
                   when BSON_TYPE_INT64 =>
-                     Add_Long_Integer (Result, Key, Read_Int64);
-
-                  when BSON_TYPE_UNDEFINED =>
-                     Add_Undefined (Result, Key);
-
-                  when BSON_TYPE_REGEX =>
-                     declare
-                        Pattern : constant String := Read_CString;
-                        Options : constant String := Read_CString;
-                     begin
-                        Add_Regex (Result, Key, Pattern, Options);
-                     end;
-
-                  when BSON_TYPE_DBPOINTER =>
-                     declare
-                        Collection : constant String := Read_String;
-                        B           : Stream_Element;
-                        High_Nibble : Integer;
-                        Low_Nibble  : Integer;
-                        Oid         : ObjectId_Type;
-                     begin
-                        for I in 0 .. 11 loop
-                           B := Buffer (Offset + Stream_Element_Offset (I));
-                           High_Nibble := Integer (B) / 16;
-                           Low_Nibble := Integer (B) mod 16;
-                           Oid (I * 2 + 1) := Hex_Chars (High_Nibble + 1);
-                           Oid (I * 2 + 2) := Hex_Chars (Low_Nibble + 1);
-                        end loop;
-                        Offset := Offset + 12;
-                        Add_DBPointer (Result, Key, Collection, Oid);
-                     end;
-
-                  when BSON_TYPE_JAVASCRIPT =>
-                     Add_JavaScript (Result, Key, Read_String);
-
-                  when BSON_TYPE_SYMBOL =>
-                     Add_Symbol (Result, Key, Read_String);
-
-                  when BSON_TYPE_JAVASCRIPT_W_SCOPE =>
-                     declare
-                        Code      : constant String := Read_String;
-                        Scope_Doc : constant BSON_Document_Type :=
-                          Read_Document;
-                        --  Variables qui sert à stocker le résultat
-
-                        Unused : Integer;
-                     begin
-                        --  Ignorer Total_Size du format BSON
-
-                        --  mais rester conforme avec le standard
-                        Unused := Read_Int32;
-                        Add_JavaScript_W_Scope (Result, Key, Code, Scope_Doc);
-                     end;
-
-                  when BSON_TYPE_TIMESTAMP =>
-                     declare
-                        Increment : constant Unsigned_32 := Unsigned_32 (Read_Int32);
-                        Seconds   : constant Unsigned_32 := Unsigned_32 (Read_Int32);
-                     begin
-                        Add_Timestamp (Result, Key, Seconds, Increment);
-                     end;
-
-                  when BSON_TYPE_DECIMAL128 =>
-                     declare
-                        Decimal_Data : Decimal128_Type;
-                     begin
-                        for I in Decimal_Data'Range loop
-                           Decimal_Data (I) := Buffer (Offset);
-                           Offset := Offset + 1;
-                        end loop;
-                        Add_Decimal128 (Result, Key, Decimal_Data);
-                     end;
-
-                  when BSON_TYPE_MINKEY =>
-                     Add_MinKey (Result, Key);
-
-                  when BSON_TYPE_MAXKEY =>
-                     Add_MaxKey (Result, Key);
+                     New_Value :=
+                       new BSON_Value_Type'
+                         (Kind => BSON_Int64, Int64_Value => Read_Int64);
+                     Result.Elements.Insert
+                       (To_Unbounded_String (Key), New_Value);
 
                   when others =>
-                     raise Invalid_BSON_Format
-                       with "Unsupported BSON type: " & Element_Type'Image;
+                     --  Skip unknown types for now
+                     null;
                end case;
             end;
          end loop;
 
          --  Vérifier le terminateur
          if Buffer (Offset) /= 0 then
-
             raise Invalid_BSON_Format with "Document not properly terminated";
          end if;
 
@@ -1374,9 +1374,10 @@ is
 
       --  Vérifier que le buffer a au moins 5 octets (taille + terminateur)
       if Buffer'Length < 5 then
-         raise BSON_Invalid_Format with
-           "Buffer too small. Minimum size: 5, Actual size: " &
-           Buffer'Length'Image;
+         raise BSON_Invalid_Format
+           with
+             "Buffer too small. Minimum size: 5, Actual size: "
+             & Buffer'Length'Image;
       end if;
 
       Doc := Read_Document;

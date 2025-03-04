@@ -11,7 +11,8 @@ is
    subtype Valid_Buffer_Size is Integer range 5 .. Integer'Last;
    subtype Valid_Array_Index is Integer range 0 .. Integer'Last;
    subtype Valid_String_Length is Integer range 0 .. Integer'Last;
-   subtype Valid_Document_Size is Stream_Element_Offset range 5 .. Stream_Element_Offset'Last;
+   subtype Valid_Document_Size is
+     Stream_Element_Offset range 5 .. Stream_Element_Offset'Last;
 
    --  Types
    type BSON_Type is
@@ -231,8 +232,7 @@ is
 
    procedure Array_Add_Value
      (Doc : in out BSON_Document_Type; Key : String; Value : BSON_Value_Type)
-   with
-     Pre => Key'Length > 0;
+   with Pre => Key'Length > 0;
 
    function To_JSON (Doc : BSON_Document_Type) return String;
 
@@ -250,8 +250,7 @@ is
 
    function From_Binary
      (Buffer : Stream_Element_Array) return BSON_Document_Type
-   with
-     Pre => Buffer'Length >= 5;  --  Minimum BSON document size
+   with Pre => Buffer'Length >= 5;  --  Minimum BSON document size
 
    procedure Free (Doc : in out BSON_Document_Type);
 
